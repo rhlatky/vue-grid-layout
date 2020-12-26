@@ -256,7 +256,7 @@
             },
             responsive() {
                 if (!this.responsive) {
-                    this.$emit('layout-updated', this.originalLayout);
+                    this.$emit('update:layout', this.originalLayout);
                     this.eventBus.emit("setColNum", this.colNum);
                 }
                 this.onWindowResize();
@@ -439,7 +439,7 @@
                 }
 
                 // new prop sync
-                this.$emit('layout-updated', layout);
+                this.$emit('update:layout', layout);
 
                 this.lastBreakpoint = newBreakpoint;
                 this.eventBus.emit("setColNum", getColsFromBreakpoint(newBreakpoint, this.cols));
