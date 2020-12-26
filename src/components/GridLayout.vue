@@ -16,22 +16,33 @@
         transition: height 200ms ease;
     }
 </style>
-<script>
-    import Vue from 'vue';
-    const elementResizeDetectorMaker = require("element-resize-detector");
+<script lang="ts">
+    import mitt from 'mitt'
+    import elementResizeDetectorMaker from 'element-resize-detector'
 
-    import {bottom, compact, getLayoutItem, moveElement, validateLayout, cloneLayout, getAllCollisions} from '@/helpers/utils';
-    import {getBreakpointFromWidth, getColsFromBreakpoint, findOrGenerateResponsiveLayout} from "@/helpers/responsiveUtils";
-    //var eventBus = require('./eventBus');
-
+    import {
+        bottom,
+        cloneLayout,
+        compact,
+        getAllCollisions,
+        getLayoutItem,
+        moveElement,
+        validateLayout
+    } from '../helpers/utils';
+    import {
+        findOrGenerateResponsiveLayout,
+        getBreakpointFromWidth,
+        getColsFromBreakpoint
+    } from "../helpers/responsiveUtils";
     import GridItem from './GridItem.vue'
-    import {addWindowEventListener, removeWindowEventListener} from "@/helpers/DOM";
+    import {addWindowEventListener, removeWindowEventListener} from "../helpers/DOM";
+    //var eventBus = require('./eventBus');
 
     export default {
         name: "GridLayout",
         provide() {
             return {
-                eventBus: null,
+                eventBus: this.eventBus,
                 layout: this
             }
         },
@@ -82,7 +93,7 @@
                 type: Boolean,
                 default: true
             },
-            layout: {
+            value: {
                 type: Array,
                 required: true,
             },
@@ -115,6 +126,7 @@
         },
         data: function () {
             return {
+                eventBus: mitt(),
                 width: null,
                 mergedStyle: {},
                 lastLayoutLength: 0,
@@ -129,31 +141,29 @@
                 layouts: {}, // array to store all layouts from different breakpoints
                 lastBreakpoint: null, // store last active breakpoint
                 originalLayout: null, // store original Layout
+                layout: JSON.parse(JSON.stringify(this.value))
             };
         },
         created () {
             const self = this;
 
             // Accessible refernces of functions for removing in beforeDestroy
-            self.resizeEventHandler = function(eventType, i, x, y, h, w) {
+            self.resizeEventHandler = function({ eventType, i, x, y, h, w }) {
                 self.resizeEvent(eventType, i, x, y, h, w);
             };
 
-            self.dragEventHandler = function(eventType, i, x, y, h, w) {
+            self.dragEventHandler = function({eventType, i, x, y, h, w}) {
                 self.dragEvent(eventType, i, x, y, h, w);
             };
 
-            self._provided.eventBus = new Vue();
-            self.eventBus = self._provided.eventBus;
-            self.eventBus.$on('resizeEvent', self.resizeEventHandler);
-            self.eventBus.$on('dragEvent', self.dragEventHandler);
+            self.eventBus.on('resizeEvent', self.resizeEventHandler);
+            self.eventBus.on('dragEvent', self.dragEventHandler);
             self.$emit('layout-created', self.layout);
         },
-        beforeDestroy: function(){
+        beforeUnmount: function(){
             //Remove listeners
-            this.eventBus.$off('resizeEvent', this.resizeEventHandler);
-            this.eventBus.$off('dragEvent', this.dragEventHandler);
-			this.eventBus.$destroy();
+            this.eventBus.off('resizeEvent', this.resizeEventHandler);
+            this.eventBus.off('dragEvent', this.dragEventHandler);
             removeWindowEventListener("resize", this.onWindowResize);
             if (this.erd) {
                 this.erd.uninstall(this.$refs.item);
@@ -162,14 +172,14 @@
         beforeMount: function() {
             this.$emit('layout-before-mount', this.layout);
         },
-        mounted: function() {
+        mounted() {
             this.$emit('layout-mounted', this.layout);
-            this.$nextTick(function () {
+            this.$nextTick( () => {
                 validateLayout(this.layout);
 
                 this.originalLayout = this.layout;
                 const self = this;
-                this.$nextTick(function() {
+                this.$nextTick(() => {
                     self.onWindowResize();
 
                     self.initResponsiveFeatures();
@@ -182,7 +192,7 @@
                     self.$emit('layout-updated',self.layout)
 
                     self.updateHeight();
-                    self.$nextTick(function () {
+                    self.$nextTick(() => {
                         this.erd = elementResizeDetectorMaker({
                             strategy: "scroll", //<- For ultra performance.
                             // See https://github.com/wnr/element-resize-detector/issues/110 about callOnAdd.
@@ -198,9 +208,9 @@
         watch: {
             width: function (newval, oldval) {
                 const self = this;
-                this.$nextTick(function () {
+                this.$nextTick(() => {
                     //this.$broadcast("updateWidth", this.width);
-                    this.eventBus.$emit("updateWidth", this.width);
+                    this.eventBus.emit("updateWidth", this.width);
                     if (oldval === null) {
                         /*
                             If oldval == null is when the width has never been
@@ -233,26 +243,26 @@
                 this.layoutUpdate();
             },
             colNum: function (val) {
-                this.eventBus.$emit("setColNum", val);
+                this.eventBus.emit("setColNum", val);
             },
             rowHeight: function() {
-                this.eventBus.$emit("setRowHeight", this.rowHeight);
+                this.eventBus.emit("setRowHeight", this.rowHeight);
             },
             isDraggable: function() {
-                this.eventBus.$emit("setDraggable", this.isDraggable);
+                this.eventBus.emit("setDraggable", this.isDraggable);
             },
             isResizable: function() {
-                this.eventBus.$emit("setResizable", this.isResizable);
+                this.eventBus.emit("setResizable", this.isResizable);
             },
             responsive() {
                 if (!this.responsive) {
-                    this.$emit('update:layout', this.originalLayout);
-                    this.eventBus.$emit("setColNum", this.colNum);
+                    this.$emit('layout-updated', this.originalLayout);
+                    this.eventBus.emit("setColNum", this.colNum);
                 }
                 this.onWindowResize();
             },
             maxRows: function() {
-                this.eventBus.$emit("setMaxRows", this.maxRows);
+                this.eventBus.emit("setMaxRows", this.maxRows);
             },
             margin() {
                 this.updateHeight();
@@ -283,7 +293,7 @@
                     }
 
                     compact(this.layout, this.verticalCompact);
-                    this.eventBus.$emit("updateWidth", this.width);
+                    this.eventBus.emit("updateWidth", this.width);
                     this.updateHeight();
 
                     this.$emit('layout-updated',this.layout)
@@ -298,14 +308,13 @@
                 if (this.$refs !== null && this.$refs.item !== null && this.$refs.item !== undefined) {
                     this.width = this.$refs.item.offsetWidth;
                 }
-                this.eventBus.$emit("resizeEvent");
+                this.eventBus.emit("resizeEvent", {});
             },
             containerHeight: function () {
                 if (!this.autoSize) return;
                 // console.log("bottom: " + bottom(this.layout))
                 // console.log("rowHeight + margins: " + (this.rowHeight + this.margin[1]) + this.margin[1])
-                const containerHeight =  bottom(this.layout) * (this.rowHeight + this.margin[1]) + this.margin[1] + 'px';
-                return containerHeight;
+                return bottom(this.layout) * (this.rowHeight + this.margin[1]) + this.margin[1] + 'px';
             },
             dragEvent: function (eventName, id, x, y, h, w) {
                 //console.log(eventName + " id=" + id + ", x=" + x + ", y=" + y);
@@ -321,13 +330,13 @@
                     this.placeholder.y = l.y;
                     this.placeholder.w = w;
                     this.placeholder.h = h;
-                    this.$nextTick(function() {
+                    this.$nextTick(()=> {
                         this.isDragging = true;
                     });
                     //this.$broadcast("updateWidth", this.width);
-                    this.eventBus.$emit("updateWidth", this.width);
+                    this.eventBus.emit("updateWidth", this.width);
                 } else {
-                    this.$nextTick(function() {
+                    this.$nextTick(() => {
                         this.isDragging = false;
                     });
                 }
@@ -336,7 +345,7 @@
                 this.layout = moveElement(this.layout, l, x, y, true, this.preventCollision);
                 compact(this.layout, this.verticalCompact);
                 // needed because vue can't detect changes on array element properties
-                this.eventBus.$emit("compact");
+                this.eventBus.emit("compact");
                 this.updateHeight();
                 if (eventName === 'dragend') this.$emit('layout-updated', this.layout);
             },
@@ -381,14 +390,14 @@
                     this.placeholder.y = y;
                     this.placeholder.w = l.w;
                     this.placeholder.h = l.h;
-                    this.$nextTick(function() {
+                    this.$nextTick(() => {
                         this.isDragging = true;
                     });
                     //this.$broadcast("updateWidth", this.width);
-                    this.eventBus.$emit("updateWidth", this.width);
+                    this.eventBus.emit("updateWidth", this.width);
 
                 } else {
-                    this.$nextTick(function() {
+                    this.$nextTick(() => {
                         this.isDragging = false;
                     });
                 }
@@ -396,7 +405,7 @@
                 if (this.responsive) this.responsiveGridLayout();
 
                 compact(this.layout, this.verticalCompact);
-                this.eventBus.$emit("compact");
+                this.eventBus.emit("compact");
                 this.updateHeight();
 
                 if (eventName === 'resizeend') this.$emit('layout-updated', this.layout);
@@ -430,10 +439,10 @@
                 }
 
                 // new prop sync
-                this.$emit('update:layout', layout);
+                this.$emit('layout-updated', layout);
 
                 this.lastBreakpoint = newBreakpoint;
-                this.eventBus.$emit("setColNum", getColsFromBreakpoint(newBreakpoint, this.cols));
+                this.eventBus.emit("setColNum", getColsFromBreakpoint(newBreakpoint, this.cols));
             },
 
             // clear all responsive layouts
